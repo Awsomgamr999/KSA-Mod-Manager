@@ -8,58 +8,48 @@ import requests
 import sys
 import ssl
 import certifi
+import subprocess
+import time
 from urllib.request import urlopen, Request
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(SCRIPT_DIR, "config.toml")
 MOD_SETUP_FOLDER = os.path.join(SCRIPT_DIR, "ModSetup")
 KSAMM_FILE = "ksamm.toml"
-KSAMM_VERSION = "v0.1.2"
+KSAMM_VERSION = "v0.1.3"
 
 ssl_context = ssl.create_default_context(cafile=certifi.where())
 
+def get_install_dir():
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
 
 def check_for_updates():
-    GITHUB_LATEST_RELEASE = (
-        "https://api.github.com/repos/Awsomgamr999/KSA-Mod-Manager/releases/latest"
-    )
-
+    print("Checking for updates...")
     try:
-        req = Request(GITHUB_LATEST_RELEASE)
-        with urlopen(req, context=ssl_context) as response:
-            data = response.read()
-
-        release = tomllib.loads(b"[dummy]\n" + data.decode("utf-8")[1:].encode()).get("dummy")  # Hack to let tomllib parse not-a-TOML.
-        # But GitHub returns JSON → load properly instead:
-        import json
-        release = json.loads(data)
-
-        latest_version = release.get("tag_name", None)
-        assets = release.get("assets", [])
-
-        if not latest_version:
-            print("Could not read version from GitHub.")
+        req = Request(GITHUB_RELEASES_API)
+        with urlopen(req, context=ssl_context) as r:
+            import json
+            data = json.load(r)
+        latest = data.get("tag_name")
+        assets = data.get("assets", [])
+        if not latest or not assets:
+            print("Invalid GitHub release format.")
             return None, None
-
-        if not assets:
-            print("No assets found in GitHub release.")
-            return None, None
-
         download_url = assets[0].get("browser_download_url")
-
-        return latest_version, download_url
-
+        if latest == KSAMM_VERSION:
+            print(f"You already have the latest version ({KSAMM_VERSION}).")
+            return latest, None
+        print(f"New version available: {latest}")
+        return latest, download_url
     except Exception as e:
         print("Update check failed:", e)
         return None, None
 
-
 def install_update(download_url):
-    print("Downloading update...")
-
+    print("\nDownloading update...")
     tmp_zip = os.path.join(tempfile.gettempdir(), "ksam_update.zip")
-
-    # Use SSL-safe context
     try:
         req = Request(download_url)
         with urlopen(req, context=ssl_context) as r:
@@ -68,30 +58,23 @@ def install_update(download_url):
     except Exception as e:
         print("Failed to download update:", e)
         return
-
-    print("Download complete.")
-
-    # Install directory of the EXE (PyInstaller) or the script (dev mode)
-    install_dir = (
-        os.path.dirname(sys.executable)
-        if getattr(sys, "frozen", False)
-        else os.path.dirname(__file__)
-    )
-
-    print("Installing update...")
-
-    try:
-        with zipfile.ZipFile(tmp_zip, "r") as z:
-            z.extractall(install_dir)
-    except Exception as e:
-        print("Failed to install update:", e)
+    print("Download complete.\nExtracting update...")
+    extract_dir = os.path.join(tempfile.gettempdir(), "ksam_update_extract")
+    if os.path.exists(extract_dir):
+        shutil.rmtree(extract_dir)
+    os.makedirs(extract_dir, exist_ok=True)
+    with zipfile.ZipFile(tmp_zip, 'r') as z:
+        z.extractall(extract_dir)
+    print("Update extracted.")
+    # Launch UpdateHelper.exe
+    install_dir = get_install_dir()
+    updater_path = os.path.join(install_dir, "UpdateHelper.exe")
+    if not os.path.exists(updater_path):
+        print("ERROR: UpdateHelper.exe not found next to KSAMMModManager.exe")
         return
-
-    print("Update installed successfully!")
-    print("Restarting KSAMM...")
-
-    # Restart the program
-    os.execv(sys.executable, [sys.executable])
+    print("Starting updater...")
+    subprocess.Popen([updater_path, extract_dir, install_dir])
+    sys.exit(0)
 
 
 def save_paths(game_data, game_files):
@@ -393,7 +376,6 @@ def main():
                 print("You already have the latest version.")
                 continue
 
-            print(f"A new version is available: {latest}")
             ask = input("Install now? (y/n): ").lower()
 
             if ask == "y":
@@ -408,6 +390,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 

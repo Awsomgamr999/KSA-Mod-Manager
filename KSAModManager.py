@@ -122,7 +122,6 @@ def rebuild_manifest(manifest_path, game_path):
     print("manifest.toml rebuilt.")
 
 
-
 def install_mods(manifest_path, game_path):
     content_path = os.path.join(game_path, "Content")
     os.makedirs(content_path, exist_ok=True)
@@ -194,6 +193,7 @@ def manage_mods(manifest_path, game_path):
         # update manifest
         print("Updating manifest...")
         rebuild_manifest(manifest_path, game_path)
+
 
 def check_for_dependencies():
     content_path = os.path.join(game_path, "Content")
@@ -306,5 +306,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 

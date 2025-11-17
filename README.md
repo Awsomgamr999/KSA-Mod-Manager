@@ -11,7 +11,7 @@ NOTE: The following instructions are for the build that is compiled into a .exe,
 - Initial Build
 ## 0.1.1:
 - paths.txt has been replaced with config.toml
-- Developers can now include a `ksamm.toml` file in their mod for configurations in the KSA Mod Loader. Currently you can specify dependencies. see [ksamm_toml information](https://github.com/Awsomgamr999/KSA-Mod-Manager/blob/main/docs/ksamm_toml.md) for instructions on how to format it.
+- Developers can now include a `ksamm.toml` file in their mod for configurations in the KSA Mod Loader. Currently you can specify required and optional dependencies. see [ksamm_toml information](https://github.com/Awsomgamr999/KSA-Mod-Manager/blob/main/docs/ksamm_toml.md) for instructions on how to format it.
 - Added a `docs` folder which gives detailed information on the uses of KSAMM.
 
 ## Quickstart Guide:
@@ -27,8 +27,10 @@ NOTE: This is NOT a modloader. Please also have StarMap installed if you want to
     mod, this can be used to put the mod in the right place but you need StarMap to actually inject code.
 
 ## Planned Features:
+- Auto-Install for mod dependencies
 - Better mod management, where you can disable & re-enable mods later
 - Auto-update for mods
+- Auto-update for KSAMM
 - Eventually a mod search tool to find new mods
 
 ## Troubleshooting:

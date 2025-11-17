@@ -9,6 +9,9 @@ NOTE: The following instructions are for the build that is compiled into a .exe,
 
 ## 1.0:
 - Initial Build
+## 1.1:
+- paths.txt has been replaced with config.toml
+- Developers can now include a `ksaml.toml` file in their mod for configurations in the KSA Mod Loader. Currently you can specify dependencies. see [ksaml.toml information]() for instructions on how to format it.
 
 ## Quickstart Guide:
 1. Run KSAModManager.exe
@@ -24,7 +27,6 @@ NOTE: This is NOT a modloader. Please also have StarMap installed if you want to
 
 ## Planned Features:
 - Better mod management, where you can disable & re-enable mods later
-- THe ability for mod developers to specify dependencies
 - Auto-update for mods
 - Eventually a mod search tool to find new mods
 

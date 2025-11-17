@@ -6,6 +6,9 @@ import tomllib
 import tomli_w
 import requests
 import sys
+import ssl
+import certifi
+from urllib.request import urlopen, Request
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(SCRIPT_DIR, "config.toml")
@@ -13,21 +16,36 @@ MOD_SETUP_FOLDER = os.path.join(SCRIPT_DIR, "ModSetup")
 KSAMM_FILE = "ksamm.toml"
 KSAMM_VERSION = "v0.1.2"
 
+ssl_context = ssl.create_default_context(cafile=certifi.where())
+
+
 def check_for_updates():
-    GITHUB_LATEST_RELEASE = "https://api.github.com/repos/Awsomgamr999/KSA-Mod-Manager/releases/latest"
+    GITHUB_LATEST_RELEASE = (
+        "https://api.github.com/repos/Awsomgamr999/KSA-Mod-Manager/releases/latest"
+    )
+
     try:
-        r = requests.get(GITHUB_LATEST_RELEASE, timeout=5)
-        if r.status_code != 200:
-            print("Could not check for updates.")
+        req = Request(GITHUB_LATEST_RELEASE)
+        with urlopen(req, context=ssl_context) as response:
+            data = response.read()
+
+        release = tomllib.loads(b"[dummy]\n" + data.decode("utf-8")[1:].encode()).get("dummy")  # Hack to let tomllib parse not-a-TOML.
+        # But GitHub returns JSON → load properly instead:
+        import json
+        release = json.loads(data)
+
+        latest_version = release.get("tag_name", None)
+        assets = release.get("assets", [])
+
+        if not latest_version:
+            print("Could not read version from GitHub.")
             return None, None
-        data = r.json()
-        latest_version = data["tag_name"]
-        assets = data.get("assets", [])
+
         if not assets:
             print("No assets found in GitHub release.")
             return None, None
 
-        download_url = assets[0]["browser_download_url"]
+        download_url = assets[0].get("browser_download_url")
 
         return latest_version, download_url
 
@@ -41,24 +59,39 @@ def install_update(download_url):
 
     tmp_zip = os.path.join(tempfile.gettempdir(), "ksam_update.zip")
 
-    with requests.get(download_url, stream=True) as r:
-        r.raise_for_status()
-        with open(tmp_zip, "wb") as f:
-            for chunk in r.iter_content(chunk_size=8192):
-                f.write(chunk)
+    # Use SSL-safe context
+    try:
+        req = Request(download_url)
+        with urlopen(req, context=ssl_context) as r:
+            with open(tmp_zip, "wb") as f:
+                f.write(r.read())
+    except Exception as e:
+        print("Failed to download update:", e)
+        return
 
     print("Download complete.")
 
-    install_dir = os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else __file__)
+    # Install directory of the EXE (PyInstaller) or the script (dev mode)
+    install_dir = (
+        os.path.dirname(sys.executable)
+        if getattr(sys, "frozen", False)
+        else os.path.dirname(__file__)
+    )
 
     print("Installing update...")
-    with zipfile.ZipFile(tmp_zip, 'r') as z:
-        z.extractall(install_dir)
 
-        print("Update installed successfully!")
+    try:
+        with zipfile.ZipFile(tmp_zip, "r") as z:
+            z.extractall(install_dir)
+    except Exception as e:
+        print("Failed to install update:", e)
+        return
 
-        print("Restarting KSAMM...")
-        os.execv(sys.executable, [sys.executable])
+    print("Update installed successfully!")
+    print("Restarting KSAMM...")
+
+    # Restart the program
+    os.execv(sys.executable, [sys.executable])
 
 
 def save_paths(game_data, game_files):
@@ -375,6 +408,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 

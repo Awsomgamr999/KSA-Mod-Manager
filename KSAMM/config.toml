@@ -1,1 +1,3 @@
-config.toml
+[paths]
+GameData = ""
+GameFiles = ""

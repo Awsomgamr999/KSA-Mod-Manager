@@ -7,9 +7,9 @@ NOTE: The following instructions are for the build that is compiled into a .exe,
 
 ## Changelog:
 
-## 1.0:
+## 0.1.0:
 - Initial Build
-## 1.1:
+## 0.1.1:
 - paths.txt has been replaced with config.toml
 - Developers can now include a `ksamm.toml` file in their mod for configurations in the KSA Mod Loader. Currently you can specify dependencies. see [ksamm_toml information](https://github.com/Awsomgamr999/KSA-Mod-Manager/blob/main/docs/ksamm_toml.md) for instructions on how to format it.
 - Added a `docs` folder which gives detailed information on the uses of KSAMM.

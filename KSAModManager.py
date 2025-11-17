@@ -1,17 +1,23 @@
 import os
 import zipfile
 import shutil
+import tomllib
+import tomli_w
 
 CONFIG_FILE = "paths.txt"
 MOD_SETUP_FOLDER = "ModSetup"
 
 
-def save_paths(manifest_path, game_path):
-    with open(CONFIG_FILE, "w") as f:
-        f.write("##manifestPath##\n")
-        f.write(manifest_path + "\n\n")
-        f.write("##gamePath##\n")
-        f.write(game_path + "\n")
+def save_paths(game_data, game_files):
+    data = {
+        "paths": {
+            "GameData": game_data,
+            "GameFiles": game_files
+        }
+    }
+    with open(CONFIG_FILE, "wb") as f:
+        tomli_w.dump(data, f)
+        
     print("Paths saved!")
 
 
@@ -20,18 +26,22 @@ def load_paths():
         print("No paths saved yet.")
         return None, None
 
-    with open(CONFIG_FILE, "r") as f:
-        lines = f.read().strip().splitlines()
-
     try:
-        # Finds the sections and goes one line down for the provided path. This should allow for easier updates as when I need another user provided path I can just add a similar finder.
-        manifest_index = lines.index("##manifestPath##") + 1 #Ill probably add more checks to make sure that its the actual path... For now it just makes sure the folder is called "Kitten Space Agency"
-        game_index = lines.index("##gamePath##") + 1
-        manifest_path = lines[manifest_index].strip()
-        game_path = lines[game_index].strip()
-        return manifest_path, game_path
-    except ValueError:
-        print("Error reading paths file.")
+        with open (CONFIG_FILE, "rb") as f:
+            data = tomllib.load(f)
+
+        paths = data.get("paths", {})
+        game_data = paths.get("GameData")
+        game_files = paths.get("GameFiles")
+
+        if not game_data or not game_files:
+            print("Missing at least one path entry.")
+            return None, None
+
+        return game_data, game_files
+
+    except Exception as e:
+        print("Error:", e)
         return None, None
 
 
@@ -45,18 +55,19 @@ def require_kitten_path(path_name):
 
 
 def read_mod_name(mod_toml_path):
-    """Extract the name from a mod.toml file"""
+    # Extract the name from a mod.toml file.
     if not os.path.exists(mod_toml_path):
         return None
 
-    with open(mod_toml_path, "r", encoding="utf-8") as f:
-        for line in f:
-            if line.strip().startswith("name"):
-                # This is looking for the mod name.
-                try:
-                    return line.split("=", 1)[1].strip().strip('"')
-                except:
-                    return None
+    try:
+        with open(mod_toml_path, "rb") as f:
+            data = tomllib.load(f)
+
+        return data.get("name", None)
+
+    except Exception as e:
+        print("Error:", e)
+        return None
     return None
 
 
@@ -65,12 +76,12 @@ def rebuild_manifest(manifest_path, game_path):
     content_path = os.path.join(game_path, "Content")
     manifest_file = os.path.join(manifest_path, "manifest.toml")
 
-    entries = []
-    core_entry = None
-
     if not os.path.isdir(content_path):
         print("No Content folder found.")
         return
+        
+    entries = []
+    core_entry = None
 
     for folder in os.listdir(content_path):
         mod_dir = os.path.join(content_path, folder)
@@ -83,7 +94,10 @@ def rebuild_manifest(manifest_path, game_path):
         if not mod_name:
             continue
 
-        entry = f'[[mods]]\nid = "{mod_name}"\nenabled = true\n'
+        entry = {
+            "id": mod_name,
+            "enabled": True
+        }
 
         if folder.lower() == "core":
             core_entry = entry  # store but don't append yet
@@ -100,8 +114,9 @@ def rebuild_manifest(manifest_path, game_path):
     # Write all normal mods after Core
     final_entries.extend(entries)
 
-    with open(manifest_file, "w", encoding="utf-8") as f:
-        f.write("\n".join(final_entries))
+    data = {"mods": final_entries}
+    with open(manifest_file, "wb") as f:
+        tomli_w.dump(data, f)
 
     print("manifest.toml rebuilt.")
 
@@ -216,3 +231,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

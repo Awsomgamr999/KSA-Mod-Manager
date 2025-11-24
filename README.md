@@ -1,5 +1,3 @@
-readme will be updated soon with new changelog
-
 # KSA Mod Manager
 
 Copyright © 2025 Awsomgamr999
@@ -11,13 +9,13 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-> Version: 0.1.3
+> Version: 0.1.5a
 
 ### NOTE: 
 - All mods are downloaded and used at your own risk. You are responsible for any damage, data loss, or security issues caused by third-party mods. Always review source code and be cautious about what you run.
 - I encourage you to look through the source code yourself, or at least have AI to do it. This program is safe but this early into KSA there is not really a team validating the safety of mods and tools for KSA. Looking through and verifying that this code is safe gets you into the habit of verifying before you accidentally install a virus or something.
 
-Zipped MD5 checksum: `e94fcadb51f017107488a319a0d48e55` Read about [Checksums](https://en.wikipedia.org/wiki/Checksum).
+Zipped MD5 checksum: `937aea6c4bd15ef543974d1cf70254f2` Read about [Checksums](https://en.wikipedia.org/wiki/Checksum).
 
 ## Changelog:
 
@@ -36,10 +34,22 @@ Zipped MD5 checksum: `e94fcadb51f017107488a319a0d48e55` Read about [Checksums](h
 - You can now launch the game from KSAMM. If you have a Mod Loader (StarMap) configured and specify it's path when prompted it will use the Mod Loader, otherwise it will boot the base game.
 - Bug fixes to UpdateHelper.exe
 - Changed license to MIT
+## 0.1.4
+- Added the ability for modders to specify metadata.
+- Updated the visuals. (Still in a command prompt)
+- Specified `[dependencies]` within ksamm.toml now auto install as long as correct information is given.
+- `set paths` now has an otion to automatically look for paths.
+## 0.1.5
+- Hotfix for critical issues in 0.1.4
+- Added a check for BOM data to make KSAMM `toml` reading more robust. Check out information on [Byte Order Marks](https://en.wikipedia.org/wiki/Byte_order_mark) here.
+## 0.1.5a
+- Hotfix for critical issues in 0.1.5
+- Mod developer metadata in `ksamm.toml` has been unlocked. You can now specify any metadata that you see fit and it will appear.
+- LICENSE.txt has been repackaged into `KSAModManager.zip`. It was forgotten in the previous release.
 
 ## Quickstart Guide:
 1. Run KSAModManager.exe
-2. Select "1" to specify your Manifest and Content\ paths. Please only go to the "Kitten
+2. Select "1" to specify your Manifest and Content\ paths. Select 2 for automatic searching and 1 for manual entering of directories. In the case of main game files, please only go to the "Kitten
     Space Agency" folder, the program will handle the rest.
 3. Put zips of mods in the "ModSetup" folder.
 4. Select "2" to install mods.
@@ -50,14 +60,13 @@ NOTE: This is NOT a modloader. Please also have StarMap installed if you want to
     mod, this can be used to put the mod in the right place but you need StarMap to actually inject code.
 
 ## Planned Features:
-- Auto-Install for mod dependencies
 - Better mod management, where you can disable & re-enable mods later
 - Auto-update for mods
 - Eventually a mod search tool to find new mods
 
 ## Troubleshooting:
 ### WARNING: FOLLOW ALL INSTRUCTIONS EXACTLY
-- KSAMM is erroring when I try to install mods.
+- KSAMM is erroring about permissions when I try to install mods.
     - Reason
         - KSA by default installs in `C:\Program Files\`, this is a protected folder and as such by default KSA is also protected. KSAMM cannot modify this without express permission.
     - Solution(s)
@@ -73,6 +82,9 @@ NOTE: This is NOT a modloader. Please also have StarMap installed if you want to
             - Click the `Allow` under `Modify`
             - Click `Apply`
     - After following these steps KSAMM should have necessary permissions.
+ 
+- I have some other issue
+    - Please ping me on Discord with more information.
 
 Thank you for downloading ModManager!
 

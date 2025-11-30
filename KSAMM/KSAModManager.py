@@ -12,10 +12,11 @@ elif __file__:
 CONFIG_FILE = os.path.join(SCRIPT_DIR + "\\config.toml")
 MOD_SETUP_FOLDER = os.path.join(SCRIPT_DIR, "ModSetup")
 KSAMM_FILE = "ksamm.toml"
-KSAMM_VERSION = "0.1.6b"
+KSAMM_VERSION = "0.1.7"
 GITHUB_RELEASES_API = "https://api.github.com/repos/Awsomgamr999/KSA-Mod-Manager/releases/latest"
 SPACEDOCK_DOWNLOAD = "https://spacedock.info/mod/4048/KSA%20Mod%20Manager%20(KSAMM)/download"
 mod_loader_candidates = ["StarMap.exe", "Ksaloader.exe"]
+STARMAP_DOWNLOAD = "https://api.github.com/repos/StarMapLoader/StarMap/releases/latest"
 
 ssl_context = ssl.create_default_context(cafile=certifi.where())
 
@@ -66,7 +67,7 @@ def initialize():
     ledger.info("Checking required folders and config files...")
     if not os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, "w") as f:
-            f.write('[paths]\nManifestPath = ""\nGamePath = ""\nModLoaderPath = ""')
+            f.write('[paths]\nManifestPath = ""\nGamePath = ""\nModLoaderPath = ""\nModLoaderVersion = ""\nDependencyAllowList = []')
     if not os.path.exists(MOD_SETUP_FOLDER):
         os.mkdir(MOD_SETUP_FOLDER)
     ledger.success("Initialization complete.")
@@ -88,24 +89,28 @@ def require_kitten_path(name, prompt, required_exes=None):
                 continue
         return os.path.abspath(user_in)
 
-def save_paths(manifest_path, game_path, mod_loader_path):
+def save_paths(manifest_path, game_path, mod_loader_path, mod_loader_version, allowlist):
     with open(CONFIG_FILE, "rb") as f:
         existing_data = tomllib.load(f)
 
-    old_manifest_path = existing_data.get("ManifestPath", None)
-    old_game_path = existing_data.get("GamePath", None)
-    old_mod_loader_path = existing_data.get("ModLoaderPath", None)
+    paths = existing_data.get("paths", {})
 
-    if not manifest_path:
-        manifest_path = old_manifest_path
-    if not game_path:
-        game_path = old_game_path
-    if not mod_loader_path:
-        mod_loader_path = old_mod_loader_path
+    old_manifest_path = paths.get("ManifestPath")
+    old_game_path = paths.get("GamePath")
+    old_mod_loader_path = paths.get("ModLoaderPath")
+    old_mod_loader_version = paths.get("ModLoaderVersion")
+    old_dependency_allow_list = paths.get("DependencyAllowList", [])
+    manifest_path = manifest_path or old_manifest_path or ""
+    game_path = game_path or old_game_path or ""
+    mod_loader_path = mod_loader_path or old_mod_loader_path or ""
+    mod_loader_version = mod_loader_version or old_mod_loader_version or ""
+    allowlist = allowlist or old_dependency_allow_list or []
     data = {"paths": {
         "ManifestPath": manifest_path or "",
         "GamePath": game_path or "",
-        "ModLoaderPath": mod_loader_path or ""
+        "ModLoaderPath": mod_loader_path or "",
+        "ModLoaderVersion": mod_loader_version or "",
+        "DependencyAllowList": allowlist or []
     }}
     with open(CONFIG_FILE, "wb") as f:
         tomli_w.dump(data, f)
@@ -114,15 +119,15 @@ def save_paths(manifest_path, game_path, mod_loader_path):
 def load_paths():
     if not os.path.exists(CONFIG_FILE):
         ledger.error("No paths saved yet.")
-        return None, None, None
+        return None, None, None, None, []
     try:
         with open(CONFIG_FILE, "rb") as f:
             data = tomllib.load(f)
         paths = data.get("paths", {})
-        return paths.get("ManifestPath"), paths.get("GamePath"), paths.get("ModLoaderPath")
+        return paths.get("ManifestPath"), paths.get("GamePath"), paths.get("ModLoaderPath"), paths.get("ModLoaderVersion"), paths.get("DependencyAllowList", [])
     except Exception as e:
         ledger.error(f"Error reading config: {e}")
-        return None, None, None
+        return None, None, None, None, []
     
 def find_paths():
     ledger.heading("Attempting to find paths.")
@@ -137,6 +142,9 @@ def find_paths():
     ]
     program_files = os.environ.get("ProgramFiles", "C:\\Program Files")
     program_files_x86 = os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)")
+    desktop_onedrive_dir = os.path.expanduser("~\\OneDrive\\Desktop")
+    default_install_path = os.path.join(os.getcwd(), "StarMap")
+    desktop_dir = os.path.expanduser("~\\Desktop")
     common_game_roots = [
         os.path.join(program_files, "Kitten Space Agency"),
     ]
@@ -146,6 +154,8 @@ def find_paths():
     manifest_path = None
     game_path = None
     mod_loader_path = None
+    mod_loader_version = None
+    allowlist = None
 
     for root in common_manifest_roots:
         candidate = os.path.join(root, "manifest.toml")
@@ -191,7 +201,7 @@ def find_paths():
             break
 
     if not mod_loader_path:
-        for root_dir in [program_files, program_files_x86]:
+        for root_dir in [program_files, program_files_x86, desktop_dir, desktop_onedrive_dir, default_install_path]:
             ledger.info(f"Mod loader not found in common locations, searching under {root_dir}...")
             for root, dirs, files in os.walk(root_dir):
                 if any(exe in files for exe in mod_loader_candidates):
@@ -208,9 +218,60 @@ def find_paths():
                 "Mod Loader", "Enter mod loader directory (or cancel):", mod_loader_candidates
             )
         else:
-            ledger.info("Mod loader will be left unset (optional).")
+            installChoice = input("Would you like to install the latest version of StarMap? (y/n)").lower()
+            if installChoice == "y":
+                try:
+                    ledger.info("Installing the latest version of StarMap...")
 
-    return manifest_path, game_path, mod_loader_path
+                    # Fetch GitHub release info
+                    response = requests.get(STARMAP_DOWNLOAD)
+                    response.raise_for_status()
+                    latest_release = response.json()
+                    mod_loader_version = latest_release.get("tag_name")
+
+                    # Find the .zip asset
+                    zip_asset = next((a for a in latest_release["assets"] if a["name"].endswith(".zip")), None)
+                    if not zip_asset:
+                        ledger.error("No .zip release found!")
+                        exit(1)
+
+                    zip_url = zip_asset["browser_download_url"]
+                    ledger.info(f"Downloading {zip_asset['name']}...")
+
+                    r = requests.get(zip_url)
+                    r.raise_for_status()
+                    z = zipfile.ZipFile(io.BytesIO(r.content))
+
+                    # Install path
+                    install_path = os.path.join(os.getcwd(), "StarMap")
+                    os.makedirs(install_path, exist_ok=True)
+                    z.extractall(install_path)
+                    ledger.info(f"StarMap installed to {install_path}")
+
+                    # Configure StarMap JSON
+                    starmap_config_path = os.path.join(install_path, "StarMapConfig.json")
+                    config_data = {
+                        "GameLocation": game_path,
+                        "RepositoryLocation": ""
+                    }
+                    with open(starmap_config_path, "w", encoding="utf-8") as f:
+                        json.dump(config_data, f, indent=4)
+                    ledger.info(f"StarMap automatically configured! Config saved at {starmap_config_path}")
+
+                    # Update mod_loader_path to point to StarMap install
+                    mod_loader_path = install_path
+
+                    # Save paths + version
+                    save_paths(manifest_path, game_path, mod_loader_path, mod_loader_version, allowlist)
+                    ledger.info("Paths and version saved to KSAMM config.")
+
+                except Exception as e:
+                    ledger.error(f"Error installing StarMap: {e}")
+
+            else:
+                ledger.info("Mod loader will be left unset (optional).")
+
+    return manifest_path, game_path, mod_loader_path, mod_loader_version, allowlist
 
 # ===================== Mod Management =====================
 def strip_bom_and_get_text(file_path, ledger):
@@ -249,7 +310,7 @@ def read_mod_name(file_path, ledger):
     toml_text = strip_bom_and_get_text(file_path, ledger)
     
     if toml_text is None:
-        return None # Error occurred in the stripping function
+        return None
 
     try:
         data = tomllib.loads(toml_text)
@@ -336,7 +397,7 @@ def manage_mods(manifest_path, game_path):
 
 # ===================== Metadata =====================
 
-def check_for_metadata(manifest, game_path, mode="metadata"):
+def check_for_metadata(manifest, game_path, allowlist, mode="metadata"):
     content_path = os.path.join(game_path, "Content")
     if not os.path.isdir(content_path):
         ledger.error("No Content folder found.")
@@ -396,7 +457,7 @@ def check_for_metadata(manifest, game_path, mode="metadata"):
                 any_missing = True
                 ledger.heading(f"Missing dependencies for {folder}")
                 ledger.block({"Required": list(missing_required.keys()), "Optional": list(missing_optional.keys())})
-                install_dependencies(game_path, manifest)
+                install_dependencies(game_path, manifest, allowlist)
 
             if mode == "metadata":
                 
@@ -407,7 +468,7 @@ def check_for_metadata(manifest, game_path, mode="metadata"):
                         f"TOML key 'metadata' in {ksamm_toml} is expected to be a table ({{...}}), "
                         f"but found type {type(raw_meta).__name__}. Skipping metadata display for this mod."
                     )
-                    meta_to_display = {} # Default to empty dict to prevent crash
+                    meta_to_display = {}
                 else:
                     meta_to_display = {}
                     
@@ -432,7 +493,7 @@ def check_for_metadata(manifest, game_path, mode="metadata"):
 
 
 # ===================== User Side Install Logic =====================
-def install_dependencies(game_path, manifest_path):
+def install_dependencies(game_path, manifest_path, allowlist):
     content_path = os.path.join(game_path, "Content")
     if not os.path.isdir(content_path):
         ledger.error("No Content folder found.")
@@ -475,16 +536,21 @@ def install_dependencies(game_path, manifest_path):
                                 continue
 
                         ledger.heading(f"Installing dependency '{dep_name}' for {folder}...")
-                        vvv = input(f"Would you like to install {dep_name} from {dep_link}? (y/n): ").lower() == "y"
-                        if vvv:
-                            installed_folder = install_mod_from_link(dep_link, content_path)
-                            if installed_folder:
-                                installed_mods[dep_name.lower()] = installed_folder
-                                ledger.success(f"Installed '{dep_name}' into folder '{installed_folder}'")
-                            else:
-                                ledger.error(f"Failed to install dependency '{dep_name}' from {dep_link}")
+                        if dep_link not in allowlist:
+                            choice = input(f"Dependency '{dep_name}' URL '{dep_link}' is not in your allowlist. Add and install? (y/n): ").lower()
+                            if choice != "y":
+                                ledger.error(f"Skipping installation of '{dep_name}' due to allowlist.")
+                                continue
+                            allowlist.append(dep_link)
+                            save_paths(None, None, None, None, allowlist)
+
+                        installed_folder = install_mod_from_link(dep_link, content_path)
+                        if installed_folder:
+                            installed_mods[dep_name.lower()] = installed_folder
+                            ledger.success(f"Installed '{dep_name}' into folder '{installed_folder}'")
                         else:
-                            return None
+                            ledger.error(f"Failed to install dependency '{dep_name}' from {dep_link}")
+
 
         except Exception as e:
             ledger.error(f"Error reading {ksamm_toml}: {e}")
@@ -502,9 +568,13 @@ def install_mod_from_link(download_url, extract_dir):
         with urlopen(req, context=ssl_context) as resp:
             data = resp.read()
 
-        z = zipfile.ZipFile(io.BytesIO(data))
-        z.extractall(extract_dir)
+        try:
+            z = zipfile.ZipFile(io.BytesIO(data))
+        except zipfile.BadZipFile:
+            ledger.error(f"Downloaded file from {download_url} is not a valid zip.")
+            return None
 
+        z.extractall(extract_dir)
         folder_name = z.namelist()[0].split("/")[0]
         return folder_name
 
@@ -516,7 +586,7 @@ def install_mod_from_link(download_url, extract_dir):
 
 # ===================== Updates =====================
 def check_for_updates():
-    ledger.info("Checking for updates...")
+    ledger.info("Checking for KSAMM updates...")
     try:
         req = Request(GITHUB_RELEASES_API)
         with urlopen(req, context=ssl_context) as r:
@@ -527,7 +597,6 @@ def check_for_updates():
             ledger.error("Could not determine latest release version from GitHub.")
             return None, None
 
-        # Clean version: strip "v"
         latest = latest.lstrip("v")
 
         if latest == KSAMM_VERSION:
@@ -537,7 +606,6 @@ def check_for_updates():
         ledger.info(f"New version available: {latest}")
         ledger.info(f"SpaceDock URL: {SPACEDOCK_DOWNLOAD}")
 
-        # Return SpaceDock URL instead of GitHub asset
         return latest, SPACEDOCK_DOWNLOAD
 
     except Exception as e:
@@ -586,6 +654,89 @@ def install_update(download_url):
     subprocess.Popen([updater_path, extract_dir, install_dir], close_fds=True)
     time.sleep(0.2)
     sys.exit(0)
+
+def check_starmap_update():
+    ledger.info("Checking for StarMap updates...")
+
+    # Load current version from config
+    _, _, _, curr_starmap_version, allowlist = load_paths()
+
+    if not curr_starmap_version:
+        ledger.info("No current StarMap version found, assuming fresh install.")
+        curr_starmap_version = "0.0.0"
+
+    try:
+        req = Request(STARMAP_DOWNLOAD)
+        with urlopen(req, context=ssl_context) as r:
+            data = json.load(r)
+
+        latest_starmap = data.get("tag_name")
+        if not latest_starmap:
+            ledger.error("Could not determine latest release version from GitHub.")
+            return None, None
+
+        latest_starmap = latest_starmap.lstrip("v")
+
+        if latest_starmap == curr_starmap_version:
+            ledger.info(f"Already at latest version ({curr_starmap_version})")
+            return latest_starmap, None
+
+        ledger.info(f"New version available: {latest_starmap}")
+        ledger.info(f"GitHub URL: {STARMAP_DOWNLOAD}")
+
+        # Return GitHub URL for download
+        return latest_starmap, STARMAP_DOWNLOAD
+
+    except Exception as e:
+        ledger.error(f"Update check failed: {e}")
+        return None, None
+
+
+def update_starmap(mod_loader_path):
+    if not mod_loader_path:
+        ledger.error("Mod loader path not set. Cannot update StarMap.")
+        return
+
+    ledger.info("Updating StarMap...")
+
+    try:
+        response = requests.get(STARMAP_DOWNLOAD)
+        response.raise_for_status()
+        latest_release = response.json()
+        mod_loader_version = latest_release.get("tag_name")
+
+        zip_asset = next((a for a in latest_release["assets"] if a["name"].endswith(".zip")), None)
+        if not zip_asset:
+            ledger.error("No .zip release found!")
+            return
+
+        zip_url = zip_asset["browser_download_url"]
+        ledger.info(f"Downloading {zip_asset['name']}...")
+        r = requests.get(zip_url)
+        r.raise_for_status()
+
+        z = zipfile.ZipFile(io.BytesIO(r.content))
+        os.makedirs(mod_loader_path, exist_ok=True)
+        z.extractall(mod_loader_path)
+
+        ledger.info(f"StarMap updated to {mod_loader_version} at {mod_loader_path}")
+
+        # Update StarMapConfig.json if it exists
+        starmap_config_path = os.path.join(mod_loader_path, "StarMapConfig.json")
+        if os.path.exists(starmap_config_path):
+            with open(starmap_config_path, "r") as f:
+                config_data = json.load(f)
+            config_data["GameLocation"] = config_data.get("GameLocation", "")
+            config_data["RepositoryLocation"] = config_data.get("RepositoryLocation", "")
+            with open(starmap_config_path, "w") as f:
+                json.dump(config_data, f, indent=4)
+            ledger.info(f"StarMapConfig.json updated at {starmap_config_path}")
+
+        return mod_loader_version
+
+    except Exception as e:
+        ledger.error(f"Error updating StarMap: {e}")
+
 
 # ===================== Game Launch =====================
 def launch_game(game_path, mod_loader_path=None):
@@ -648,7 +799,7 @@ def main():
                     )
 
             elif sub_choice == "2":
-                manifest, game_path, mod_loader_path = find_paths()
+                manifest, game_path, mod_loader_path, mod_loader_version, _ = find_paths()
                 if not game_path or not manifest:
                     ledger.error("Auto-detection failed for required paths. Please enter manually.")
                     continue
@@ -661,38 +812,48 @@ def main():
                 ledger.error("Invalid choice.")
                 continue
 
-            save_paths(manifest, game_path, mod_loader_path)
+            save_paths(manifest, game_path, mod_loader_path, mod_loader_version, _)
 
         elif choice == "2":
-            manifest, game_path, mod_loader_path = load_paths()
+            manifest, game_path, mod_loader_path, mod_loader_version, allowlist = load_paths()
             if not game_path:
                 ledger.error("Game path not set.")
                 continue
             install_mods(manifest, game_path)
-            check_for_metadata(manifest, game_path, "dependencies")
+            check_for_metadata(manifest, game_path, allowlist, mode = "dependencies")
 
         elif choice == "3":
-            manifest, game_path, mod_loader_path = load_paths()
+            manifest, game_path, mod_loader_path, mod_loader_version, allowlist = load_paths()
             if not game_path:
                 ledger.error("Game path not set.")
                 continue
             manage_mods(manifest, game_path)
 
         elif choice == "4":
+            manifest, game_path, mod_loader_path, mod_loader_version, allowlist = load_paths()
+
+            if mod_loader_path:
+                latest_starmap, url = check_starmap_update()
+
+                if latest_starmap and latest_starmap != mod_loader_version:
+                    if input(f"New StarMap version, {latest_starmap}, install now? (y/n)").lower() == "y":
+                        mod_loader_version = update_starmap(mod_loader_path)
+                        save_paths(manifest, game_path, mod_loader_path, mod_loader_version, allowlist)
+
             latest, url = check_for_updates()
             if latest and latest != KSAMM_VERSION:
                 if input("Install now? (y/n): ").lower() == "y":
                     install_update(url)
 
         elif choice == "5":
-            _, game_path, mod_loader_path = load_paths()
+            _, game_path, mod_loader_path, _, allowlist = load_paths()
             if not game_path:
                 ledger.error("Game path not set.")
                 continue
             launch_game(game_path, mod_loader_path)
 
         elif choice == "6":
-            manifest, game_path, mod_loader_path = load_paths()
+            manifest, game_path, mod_loader_path, mod_loader_version, allowlist = load_paths()
             check_for_metadata(manifest, game_path, "metadata")
 
         elif choice.lower() == "q":
